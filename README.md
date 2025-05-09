@@ -25,10 +25,6 @@ Este proyecto es una aplicación desarrollada en **R** utilizando **Shiny**, que
 3. Asegúrate de tener instaladas las librerías necesarias.
 4. Haz clic en **Run App** para ejecutar la aplicación.
 
-## 📜 Licencia
-
-Este proyecto se distribuye bajo la licencia **MIT**. Puedes usarlo, modificarlo y compartirlo libremente citando al autor original.
-
 ---
 
 **Desarrollado por:**  
