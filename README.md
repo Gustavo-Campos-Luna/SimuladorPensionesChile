@@ -28,16 +28,12 @@ Este proyecto es una aplicación desarrollada en **R** utilizando **Shiny**, que
 ## 📸 Capturas de la App
 
 ### 🧾 Sección de Inputs del Usuario
-![Inputs](Captura%20de%20pantalla%202025-05-09%20182650.png)
+![Inputs](Captura%20de%20pantalla%202025-05-09%20182721.png)
 
 ### 📊 Resultados principales
-![Resultados](Captura%20de%20pantalla%202025-05-09%20182721.png)
-
-### 🧮 Comparación de modalidades
-![Modalidades](Captura%20de%20pantalla%202025-05-09%20182743.png)
-
-### ⛔ Impacto de lagunas previsionales
-![Lagunas](Captura%20de%20pantalla%202025-05-09%20182808.png)
+![Resultados 1](Captura%20de%20pantalla%202025-05-09%20182650.png)
+![Resultados 2](Captura%20de%20pantalla%202025-05-09%20182808.png)
+![Resultados 3](Captura%20de%20pantalla%202025-05-09%20182743.png)
 
 ---
 
