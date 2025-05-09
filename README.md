@@ -25,9 +25,23 @@ Este proyecto es una aplicación desarrollada en **R** utilizando **Shiny**, que
 3. Asegúrate de tener instaladas las librerías necesarias.
 4. Haz clic en **Run App** para ejecutar la aplicación.
 
+## 📸 Capturas de la App
+
+### 🧾 Sección de Inputs del Usuario
+![Inputs](Captura%20de%20pantalla%202025-05-09%20182650.png)
+
+### 📊 Resultados principales
+![Resultados](Captura%20de%20pantalla%202025-05-09%20182721.png)
+
+### 🧮 Comparación de modalidades
+![Modalidades](Captura%20de%20pantalla%202025-05-09%20182743.png)
+
+### ⛔ Impacto de lagunas previsionales
+![Lagunas](Captura%20de%20pantalla%202025-05-09%20182808.png)
+
 ---
 
 **Desarrollado por:**  
 **Gustavo Felipe Campos Luna**  
 📧 [felipecamposluna2001@gmail.com]  
-🔗 [LinkedIn](www.linkedin.com/in/gustavo-campos-luna)
+🔗 [LinkedIn](https://www.linkedin.com/in/gustavo-campos-luna)
