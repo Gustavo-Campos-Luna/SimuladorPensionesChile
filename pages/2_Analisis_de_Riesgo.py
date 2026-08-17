@@ -8,13 +8,14 @@ primero una simulacion en la pagina Simulador.
 
 import sys
 from pathlib import Path
+
 import streamlit as st
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from calculators.monte_carlo import MonteCarloSimulator
-from visualizations.charts import PensionCharts
 from utils.formatters import formato_clp, formato_porcentaje
+from visualizations.charts import PensionCharts
 
 st.set_page_config(
     page_title="Analisis de Riesgo",

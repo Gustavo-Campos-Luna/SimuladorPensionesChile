@@ -8,7 +8,6 @@ en una sola llamada para uso desde la interfaz Streamlit.
 
 from typing import Dict, Optional, Tuple
 
-
 # Tipo de retorno estandar de todos los validadores
 ValidationResult = Tuple[bool, Optional[str]]
 

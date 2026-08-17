@@ -6,15 +6,15 @@ principales, metricas financieras avanzadas, tabla de simulacion
 y aviso legal. Utiliza ReportLab para la composicion de paginas.
 """
 
-from io import BytesIO
 from datetime import datetime
+from io import BytesIO
 from typing import Dict
 
 import pandas as pd
 from reportlab.lib import colors
-from reportlab.lib.enums import TA_CENTER, TA_JUSTIFY, TA_LEFT
+from reportlab.lib.enums import TA_CENTER, TA_JUSTIFY
 from reportlab.lib.pagesizes import letter
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import inch
 from reportlab.platypus import (
     PageBreak,
@@ -24,7 +24,6 @@ from reportlab.platypus import (
     Table,
     TableStyle,
 )
-
 
 # ---------------------------------------------------------------------------
 # Paleta corporativa
