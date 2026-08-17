@@ -12,20 +12,20 @@ Arquitectura:
         _distribuir_lagunas()         -> asignacion de periodos sin cotizacion
 """
 
-import numpy as np
-import pandas as pd
 from typing import Dict, List, Optional
 
+import numpy as np
+import pandas as pd
+
 from .financial_metrics import (
-    calcular_vpn,
-    calcular_tir,
-    calcular_rentabilidad_real,
-    calcular_valor_presente_pension,
-    calcular_pension_retiro_programado,
     calcular_brecha_previsional,
     calcular_duracion_macaulay,
     calcular_dv01_pension,
-    deflactar_serie,
+    calcular_pension_retiro_programado,
+    calcular_rentabilidad_real,
+    calcular_tir,
+    calcular_valor_presente_pension,
+    calcular_vpn,
     clp_a_uf,
 )
 
@@ -40,13 +40,16 @@ class PensionCalculator:
 
     Constants:
         TOPE_IMPONIBLE_UF: Tope imponible vigente en UF (Ley 19.728).
-        PBS_CLP: Pension Basica Solidaria 2024 en CLP.
+        PBS_CLP: Pension Basica Solidaria de referencia (2024, CLP). Valor de
+            respaldo solo si calcular_pension_completa() no recibe el
+            parametro `pbs`; se recomienda pasar el valor vigente obtenido
+            dinamicamente via data_sources.obtener_pension_basica_solidaria().
         FACTOR_RENTA_VITALICIA: Porcentaje estimado de conversion RP->RV.
         TASA_RETIRO_DESCUENTO: Tasa de descuento real para calculo de PMT.
     """
 
     TOPE_IMPONIBLE_UF: float = 84.7
-    PBS_CLP: int = 214_296
+    PBS_CLP: int = 214_296  # Referencia 2024; usar el parametro `pbs` con el valor vigente.
     FACTOR_RENTA_VITALICIA: float = 0.92
     TASA_RETIRO_DESCUENTO: float = 0.03
 
@@ -66,6 +69,7 @@ class PensionCalculator:
         anos_lagunas: int,
         distribucion_lagunas: str,
         valor_uf: float = 37_500.0,
+        pbs: Optional[float] = None,
     ) -> Dict:
         """Proyeccion completa de pension con metricas financieras avanzadas.
 
@@ -90,6 +94,9 @@ class PensionCalculator:
                 Opciones: 'Aleatorio', 'Inicio de carrera',
                           'Mitad de carrera', 'Final de carrera'.
             valor_uf: Valor vigente de la UF en CLP.
+            pbs: Pension Basica Solidaria vigente en CLP. Si es None, usa
+                PBS_CLP (valor de referencia 2024; se recomienda pasar el
+                valor vigente obtenido dinamicamente via data_sources).
 
         Returns:
             Diccionario con resultados, metricas financieras y DataFrame anual.
@@ -176,8 +183,9 @@ class PensionCalculator:
         )
 
         # Piso PBS
-        pension_rp_con_pbs = max(pension_rp_nominal, self.PBS_CLP)
-        pension_rv_con_pbs = max(pension_rv_nominal, self.PBS_CLP)
+        pbs_efectivo = pbs if pbs is not None else self.PBS_CLP
+        pension_rp_con_pbs = max(pension_rp_nominal, pbs_efectivo)
+        pension_rv_con_pbs = max(pension_rv_nominal, pbs_efectivo)
 
         return {
             # Saldos
@@ -218,6 +226,7 @@ class PensionCalculator:
             "factor_renta_vitalicia": self.FACTOR_RENTA_VITALICIA,
             "inflacion_esperada": r_inflacion * 100.0,
             "valor_uf_usado": valor_uf,
+            "pbs_usado": pbs_efectivo,
             "tasa_descuento_retiro": self.TASA_RETIRO_DESCUENTO * 100.0,
         }
 
