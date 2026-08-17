@@ -6,12 +6,11 @@ definida en PensionCharts.PALETTE. El template base es 'plotly_white'
 para garantizar legibilidad en contextos de presentacion profesional.
 """
 
-import plotly.graph_objects as go
-import plotly.express as px
-from plotly.subplots import make_subplots
+from typing import Dict
+
 import pandas as pd
-import numpy as np
-from typing import Dict, List, Optional
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 
 
 class PensionCharts:

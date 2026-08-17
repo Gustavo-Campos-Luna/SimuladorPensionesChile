@@ -1,16 +1,21 @@
 """
 Cliente de datos macroeconomicos para el simulador de pensiones.
 
-Fuente exclusiva: API REST del Banco Central de Chile (si3.bcentral.cl).
-
-Credenciales requeridas (registro gratuito):
+Fuente primaria: API REST del Banco Central de Chile (si3.bcentral.cl).
+Requiere registro gratuito y variables de entorno BCENTRAL_USER/BCENTRAL_PASS:
     https://si3.bcentral.cl/siete/secure/cuadros/home.aspx
 
-Variables de entorno:
-    BCENTRAL_USER  — correo de registro
-    BCENTRAL_PASS  — contrasena de la cuenta
+Fuente de respaldo (fallback automatico): mindicador.cl — API publica sin
+autenticacion. Se usa automaticamente para UF e IPC si el BCCh no esta
+configurado o la llamada falla (red, credenciales, error HTTP), para que
+la aplicacion funcione sin configuracion previa. La cobertura historica de
+mindicador.cl es menor que la del BCCh (consultada año por año).
 
-Datos sin endpoint publico en BCCh:
+Variables de entorno:
+    BCENTRAL_USER  — correo de registro (opcional; sin ella se usa el fallback)
+    BCENTRAL_PASS  — contrasena de la cuenta (opcional; sin ella se usa el fallback)
+
+Datos sin endpoint publico en BCCh ni en mindicador.cl:
     Comisiones AFP, rentabilidades por fondo y PBS son valores regulados
     por la Superintendencia de Pensiones. Se mantienen como constantes
     auditadas con fuente oficial documentada y deben actualizarse manualmente.
@@ -31,12 +36,14 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 _BCENTRAL_BASE = "https://si3.bcentral.cl/SieteRestWS/SieteRestWS.ashx"
+_MINDICADOR_BASE = "https://mindicador.cl/api"
 _TIMEOUT = 10  # segundos
 
 # Series BCCh — verificar vigencia en si3.bcentral.cl/siete/secure/cuadros/home.aspx
 _SERIES: Dict[str, str] = {
     "uf":  "F073.UFF.PRE.Z.D",        # UF, valor diario
     "ipc": "F074.IPC.VAR.Z.EP23.C.M", # IPC General, variacion mensual, serie empalmada base 2023=100, desde 2010
+    "utm": "F073.UTR.PRE.Z.M",        # Unidad Tributaria Mensual, valor mensual
 }
 
 _CREDENCIALES_INSTRUCCIONES = (
@@ -133,26 +140,38 @@ class DataFetcher:
         self._cache: Dict[str, object] = {}
         self._bcentral_user = os.environ.get("BCENTRAL_USER", "")
         self._bcentral_pass = os.environ.get("BCENTRAL_PASS", "")
+        self._uso_fallback = False
 
     # ------------------------------------------------------------------
     # UF
     # ------------------------------------------------------------------
 
     def obtener_uf_actual(self) -> float:
-        """Valor de la UF del dia desde BCCh (serie F073.UFF.PRE.Z.D).
+        """Valor de la UF del dia. BCCh (serie F073.UFF.PRE.Z.D) como fuente
+        primaria, con fallback automatico a mindicador.cl si el BCCh no esta
+        configurado o la llamada falla.
 
         Returns:
             UF en CLP.
 
         Raises:
-            EnvironmentError: Si las credenciales no estan configuradas.
-            ValueError: Si la serie no retorna datos validos.
-            requests.HTTPError: Si la API retorna un error HTTP.
+            ValueError: Si ninguna de las dos fuentes retorna datos validos.
         """
         clave = f"uf_{datetime.now().date()}"
         if clave in self._cache:
             return self._cache[clave]  # type: ignore[return-value]
 
+        try:
+            valor = self._uf_desde_bcentral()
+        except (EnvironmentError, requests.RequestException, ValueError, KeyError) as exc:
+            logger.warning("BCCh no disponible para UF (%s). Usando fallback mindicador.cl.", exc)
+            valor = self._uf_desde_mindicador()
+            self._uso_fallback = True
+
+        self._cache[clave] = valor
+        return valor
+
+    def _uf_desde_bcentral(self) -> float:
         self._verificar_credenciales()
 
         hoy = datetime.now().date()
@@ -173,7 +192,80 @@ class DataFetcher:
         ultimo = sorted(series, key=lambda x: x["indexDateString"], reverse=True)[0]
         valor = float(ultimo["value"].replace(",", "."))
         logger.info("UF obtenida desde BCCh: %.2f", valor)
+        return valor
+
+    def _uf_desde_mindicador(self) -> float:
+        """Fallback: UF del dia desde mindicador.cl (API publica, sin autenticacion)."""
+        response = requests.get(f"{_MINDICADOR_BASE}/uf", timeout=_TIMEOUT)
+        response.raise_for_status()
+        serie = response.json().get("serie", [])
+        if not serie:
+            raise ValueError("mindicador.cl no retorno observaciones para la serie UF.")
+        valor = float(serie[0]["valor"])
+        logger.info("UF obtenida desde mindicador.cl (fallback): %.2f", valor)
+        return valor
+
+    # ------------------------------------------------------------------
+    # UTM
+    # ------------------------------------------------------------------
+
+    def obtener_utm_actual(self) -> float:
+        """Valor de la UTM del mes vigente. BCCh (serie F073.UTR.PRE.Z.M,
+        confirmada contra la API real) como fuente primaria, con fallback
+        automatico a mindicador.cl si el BCCh no esta configurado o falla.
+
+        Returns:
+            UTM en CLP.
+
+        Raises:
+            ValueError: Si ninguna de las dos fuentes retorna datos validos.
+        """
+        clave = f"utm_{datetime.now().strftime('%Y-%m')}"
+        if clave in self._cache:
+            return self._cache[clave]  # type: ignore[return-value]
+
+        try:
+            valor = self._utm_desde_bcentral()
+        except (EnvironmentError, requests.RequestException, ValueError, KeyError) as exc:
+            logger.warning("BCCh no disponible para UTM (%s). Usando fallback mindicador.cl.", exc)
+            valor = self._utm_desde_mindicador()
+            self._uso_fallback = True
+
         self._cache[clave] = valor
+        return valor
+
+    def _utm_desde_bcentral(self) -> float:
+        self._verificar_credenciales()
+
+        hoy = datetime.now().date()
+        inicio_mes_anterior = hoy.replace(day=1) - timedelta(days=32)
+        params = {
+            "user":       self._bcentral_user,
+            "pass":       self._bcentral_pass,
+            "function":   "GetSeries",
+            "timeseries": _SERIES["utm"],
+            "startdate":  inicio_mes_anterior.strftime("%Y-%m-%d"),
+            "enddate":    hoy.strftime("%Y-%m-%d"),
+            "format":     "json",
+        }
+        data = self._get_bcentral(params)
+        series = data["Series"]["Obs"]
+        if not series:
+            raise ValueError("BCCh no retorno observaciones para la serie UTM.")
+        ultimo = sorted(series, key=lambda x: x["indexDateString"], reverse=True)[0]
+        valor = float(ultimo["value"].replace(",", "."))
+        logger.info("UTM obtenida desde BCCh: %.2f", valor)
+        return valor
+
+    def _utm_desde_mindicador(self) -> float:
+        """Fallback: UTM del mes desde mindicador.cl (API publica, sin autenticacion)."""
+        response = requests.get(f"{_MINDICADOR_BASE}/utm", timeout=_TIMEOUT)
+        response.raise_for_status()
+        serie = response.json().get("serie", [])
+        if not serie:
+            raise ValueError("mindicador.cl no retorno observaciones para la serie UTM.")
+        valor = float(serie[0]["valor"])
+        logger.info("UTM obtenida desde mindicador.cl (fallback): %.2f", valor)
         return valor
 
     # ------------------------------------------------------------------
@@ -181,9 +273,12 @@ class DataFetcher:
     # ------------------------------------------------------------------
 
     def obtener_inflacion_anual(self, anos: int = 10) -> Dict[int, float]:
-        """Inflacion anual compuesta calculada desde el IPC mensual BCCh.
+        """Inflacion anual compuesta calculada desde el IPC mensual.
 
-        Fuente: serie F074.IPC.VAR.Z.EP23.C.M (empalmada base 2023=100, desde 2010)
+        Fuente primaria: BCCh, serie F074.IPC.VAR.Z.EP23.C.M (empalmada base
+        2023=100, desde 2010). Si el BCCh no esta configurado o falla, usa
+        mindicador.cl como fallback (API publica, sin autenticacion; cobertura
+        historica menor, consultada año por año).
 
         Formula: inf_anual_t = prod(1 + ipc_mes/100 for mes in t) - 1
 
@@ -194,15 +289,19 @@ class DataFetcher:
             Dict {ano: inflacion_anual_porcentaje}.
 
         Raises:
-            EnvironmentError: Si las credenciales no estan configuradas.
-            ValueError: Si la serie no retorna datos suficientes.
-            requests.HTTPError: Si la API retorna un error HTTP.
+            ValueError: Si ninguna de las dos fuentes retorna datos suficientes.
         """
         clave = f"inflacion_anual_{anos}"
         if clave in self._cache:
             return self._cache[clave]  # type: ignore[return-value]
 
-        serie_mensual = self._ipc_mensual_desde_bcentral(anos)
+        try:
+            serie_mensual = self._ipc_mensual_desde_bcentral(anos)
+        except (EnvironmentError, requests.RequestException, ValueError, KeyError) as exc:
+            logger.warning("BCCh no disponible para IPC (%s). Usando fallback mindicador.cl.", exc)
+            serie_mensual = self._ipc_mensual_desde_mindicador(anos)
+            self._uso_fallback = True
+
         resultado = self._calcular_inflacion_anual(serie_mensual)
 
         if not resultado:
@@ -251,6 +350,40 @@ class DataFetcher:
             raise ValueError("BCCh no retorno observaciones validas para la serie IPC.")
 
         logger.info("IPC mensual obtenido desde BCCh: %d registros.", len(resultado))
+        return resultado
+
+    def _ipc_mensual_desde_mindicador(self, anos: int) -> Dict[str, float]:
+        """Fallback: variaciones mensuales del IPC desde mindicador.cl.
+
+        mindicador.cl no ofrece un rango de fechas arbitrario; se consulta
+        año por año via /api/ipc/{año} y se combinan los resultados.
+
+        Returns:
+            Dict {YYYY-MM: variacion_porcentual_mensual}.
+
+        Raises:
+            ValueError: Si no se obtiene ningun dato valido.
+        """
+        ano_actual = datetime.now().year
+        resultado: Dict[str, float] = {}
+
+        for ano in range(ano_actual - anos, ano_actual + 1):
+            try:
+                response = requests.get(f"{_MINDICADOR_BASE}/ipc/{ano}", timeout=_TIMEOUT)
+                response.raise_for_status()
+                serie = response.json().get("serie", [])
+            except requests.RequestException:
+                continue
+
+            for entry in serie:
+                fecha = entry["fecha"][:7]  # YYYY-MM
+                if entry.get("valor") is not None:
+                    resultado[fecha] = float(entry["valor"])
+
+        if not resultado:
+            raise ValueError("mindicador.cl no retorno observaciones validas para la serie IPC.")
+
+        logger.info("IPC mensual obtenido desde mindicador.cl (fallback): %d registros.", len(resultado))
         return resultado
 
     @staticmethod
@@ -360,13 +493,12 @@ class DataFetcher:
 
         Returns:
             Dict con uf, inflacion_anual, inflacion_promedio, comisiones_afp,
-            rentabilidades_fondos, pbs, topes y fecha.
-
-        Raises:
-            EnvironmentError: Si las credenciales BCCh no estan configuradas.
+            rentabilidades_fondos, pbs, topes, fecha y la fuente efectivamente
+            usada para UF/IPC (BCCh o el fallback mindicador.cl).
         """
-        return {
+        resultado = {
             "uf":                  self.obtener_uf_actual(),
+            "utm":                 self.obtener_utm_actual(),
             "inflacion_anual":     self.obtener_inflacion_anual(10),
             "inflacion_promedio":  self.obtener_inflacion_promedio(5),
             "comisiones_afp":      self.obtener_comisiones_afp(),
@@ -377,9 +509,14 @@ class DataFetcher:
             "tope_imponible_uf":    self.obtener_tope_imponible(en_uf=True),
             "tope_imponible_clp":   self.obtener_tope_imponible(en_uf=False),
             "sueldo_minimo":        self.obtener_sueldo_minimo(),
-            "fuente":               "Banco Central de Chile — si3.bcentral.cl",
             "fecha_actualizacion":  datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         }
+        resultado["fuente"] = (
+            "mindicador.cl (fallback — BCCh no disponible)"
+            if self._uso_fallback
+            else "Banco Central de Chile — si3.bcentral.cl"
+        )
+        return resultado
 
     # ------------------------------------------------------------------
     # Utilidades internas

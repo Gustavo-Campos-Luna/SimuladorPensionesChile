@@ -19,16 +19,15 @@ Metodologia:
         - Inflacion >= 0 %
 """
 
-import numpy as np
-import pandas as pd
 from typing import Dict, List, Optional
 
-from .pension_engine import PensionCalculator
+import numpy as np
+import pandas as pd
+
 from .financial_metrics import (
-    calcular_pension_retiro_programado,
-    calcular_rentabilidad_real,
     tasa_mensual_equivalente,
 )
+from .pension_engine import PensionCalculator
 
 
 class MonteCarloSimulator:

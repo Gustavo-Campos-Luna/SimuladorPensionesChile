@@ -5,9 +5,16 @@ Implementa calculo de VPN, TIR, rentabilidad real, duracion de pasivo
 previsional, beneficios tributarios APV y anualidades actuariales.
 """
 
+from typing import Dict, List, Optional
+
 import numpy as np
-from scipy.optimize import newton, brentq
-from typing import Dict, List, Tuple, Optional
+from scipy.optimize import brentq, newton
+
+# Unidad Tributaria Mensual (UTM) vigente, en CLP.
+# Fuente: Servicio de Impuestos Internos (sii.cl/valores_y_fechas/utm).
+# Se reajusta el 1 de cada mes segun IPC del mes anterior.
+# Valor vigente a agosto de 2026: actualizar manualmente cuando corresponda.
+_UTM_CLP: float = 71_649.0
 
 
 # ---------------------------------------------------------------------------
@@ -310,6 +317,7 @@ def calcular_apv_beneficio_tributario(
     valor_uf: float,
     anos_acumulacion: int,
     rentabilidad_anual: float,
+    valor_utm: Optional[float] = None,
 ) -> Dict[str, float]:
     """Beneficio tributario del APV segun regimen elegido.
 
@@ -329,10 +337,14 @@ def calcular_apv_beneficio_tributario(
         valor_uf: Valor vigente de la UF en CLP.
         anos_acumulacion: Anos de acumulacion hasta jubilacion.
         rentabilidad_anual: Rentabilidad nominal esperada del fondo.
+        valor_utm: Valor vigente de la UTM en CLP. Si es None, usa _UTM_CLP
+            (valor de referencia agosto 2026; se recomienda pasar el valor
+            vigente obtenido dinamicamente via data_sources.obtener_utm_actual()).
 
     Returns:
         Diccionario con beneficio_anual, capital_acumulado_extra y comparacion.
     """
+    utm = valor_utm if valor_utm is not None else _UTM_CLP
     tope_anual_uf = 600.0
     tope_anual_clp = tope_anual_uf * valor_uf
     aporte_anual = min(monto_apv_mensual * 12, tope_anual_clp)
@@ -341,11 +353,11 @@ def calcular_apv_beneficio_tributario(
     n = anos_acumulacion * 12
     factor_acumulacion = ((1.0 + r_m) ** n - 1.0) / r_m if r_m > 0 else n
 
-    capital_sin_apv = 0.0
     capital_con_apv = aporte_anual / 12 * factor_acumulacion
 
     if regimen.upper() == "A":
-        subsidio_estatal_anual = min(aporte_anual * 0.15, 6 * 30_400 * 12)
+        # Tope: 15% del ahorro anual, hasta un maximo de 6 UTM al ano (no 6 UTM x 12).
+        subsidio_estatal_anual = min(aporte_anual * 0.15, 6 * utm)
         beneficio_anual = subsidio_estatal_anual
         capital_extra = subsidio_estatal_anual / 12 * factor_acumulacion
         descripcion = "Subsidio estatal directo del 15% sobre aportes (tope 6 UTM anuales)"
@@ -372,6 +384,7 @@ def comparar_regimenes_apv(
     valor_uf: float,
     anos_acumulacion: int,
     rentabilidad_anual: float,
+    valor_utm: Optional[float] = None,
 ) -> Dict[str, Dict]:
     """Compara Regimen A y B del APV para el perfil del cotizante.
 
@@ -381,17 +394,19 @@ def comparar_regimenes_apv(
         valor_uf: Valor de la UF en CLP.
         anos_acumulacion: Anos hasta jubilacion.
         rentabilidad_anual: Rentabilidad esperada del fondo APV.
+        valor_utm: Valor vigente de la UTM en CLP (tope del subsidio Regimen A).
+            Si es None, usa el valor de referencia interno.
 
     Returns:
         Diccionario con resultados de ambos regimenes y recomendacion.
     """
     resultado_a = calcular_apv_beneficio_tributario(
         monto_apv_mensual, "A", tasa_impositiva_marginal,
-        valor_uf, anos_acumulacion, rentabilidad_anual,
+        valor_uf, anos_acumulacion, rentabilidad_anual, valor_utm,
     )
     resultado_b = calcular_apv_beneficio_tributario(
         monto_apv_mensual, "B", tasa_impositiva_marginal,
-        valor_uf, anos_acumulacion, rentabilidad_anual,
+        valor_uf, anos_acumulacion, rentabilidad_anual, valor_utm,
     )
 
     recomendado = "B" if resultado_b["beneficio_anual"] > resultado_a["beneficio_anual"] else "A"

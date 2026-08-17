@@ -6,23 +6,23 @@ detallada del saldo acumulado, pension estimada, indicadores financieros
 (VPN, TIR, duracion) y analisis de brecha previsional.
 """
 
-import sys
-from pathlib import Path
 import json
+import sys
 from datetime import datetime
+from pathlib import Path
 
-import streamlit as st
 import pandas as pd
+import streamlit as st
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from calculators.pension_engine import PensionCalculator
-from calculators.financial_metrics import comparar_regimenes_apv
-from visualizations.charts import PensionCharts
-from utils.formatters import formato_clp, formato_porcentaje, formato_uf, formato_anos
-from utils.validators import validar_simulacion_completa
 from api.data_sources import data_fetcher
+from calculators.financial_metrics import comparar_regimenes_apv
+from calculators.pension_engine import PensionCalculator
+from utils.formatters import formato_anos, formato_clp, formato_porcentaje, formato_uf
 from utils.pdf_generator import PDFReportGenerator
+from utils.validators import validar_simulacion_completa
+from visualizations.charts import PensionCharts
 
 # ---------------------------------------------------------------------------
 # Configuracion de pagina
@@ -215,6 +215,7 @@ if simular_btn or "resultados" in st.session_state:
         "anos_lagunas": anos_lagunas,
         "distribucion_lagunas": distribucion_lagunas,
         "valor_uf": datos["uf"],
+        "pbs": datos["pbs"],
     }
 
     valido, mensaje_error = validar_simulacion_completa(parametros)
@@ -456,6 +457,7 @@ if simular_btn or "resultados" in st.session_state:
                 valor_uf=datos["uf"],
                 anos_acumulacion=resultados["anos_cotizacion"],
                 rentabilidad_anual=resultados["rentabilidad_nominal"] / 100.0,
+                valor_utm=datos["utm"],
             )
 
             reg_a = comparacion["regimen_a"]
