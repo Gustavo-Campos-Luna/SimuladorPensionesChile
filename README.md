@@ -111,8 +111,11 @@ Simulador-pensiones-Chile/
 |-- .streamlit/
 |   |-- config.toml                 # Tema y configuracion del servidor
 |
+|-- tests/                          # pytest: motor de calculo, metricas, Monte Carlo
+|-- pyproject.toml                  # Config de ruff y pytest
 |-- requirements.txt                # Dependencias Python con versiones fijadas
-|-- .python-version                 # Version de Python (3.11)
+|-- requirements-dev.txt            # pytest, ruff (no requeridas para correr la app)
+|-- .python-version                 # Version de Python (3.9)
 |-- .gitignore
 |-- README.md
 ```
@@ -145,7 +148,37 @@ pip install -r requirements.txt
 streamlit run Home.py
 ```
 
-La aplicacion estara disponible en `http://localhost:8501`.
+La aplicacion estara disponible en `http://localhost:8501`. Funciona sin
+configuracion adicional: usa mindicador.cl (API publica) para UF e inflacion.
+
+### Configuracion opcional: Banco Central de Chile
+
+Por defecto la app obtiene UF e IPC desde mindicador.cl (API publica, sin
+registro). Para usar la fuente primaria del Banco Central de Chile (mismos
+indicadores, mayor profundidad historica), registrate gratis en
+[si3.bcentral.cl](https://si3.bcentral.cl/siete/secure/cuadros/home.aspx) y
+define las siguientes variables de entorno antes de ejecutar la app:
+
+```bash
+export BCENTRAL_USER='tu_correo@ejemplo.com'   # PowerShell: $env:BCENTRAL_USER = '...'
+export BCENTRAL_PASS='tu_contrasena'
+```
+
+Si las credenciales no estan configuradas o la API del BCCh falla, la
+aplicacion recurre automaticamente a mindicador.cl sin interrumpir el uso.
+
+### Tests
+
+La suite cubre la logica cuantitativa (motor de calculo, metricas financieras,
+Monte Carlo): validacion de parametros, formula de anualidad, ecuacion de
+Fisher, convergencia de TIR, tope del subsidio APV, y distribucion de lagunas
+previsionales. No cubre las paginas Streamlit ni las llamadas HTTP en vivo.
+
+```bash
+pip install -r requirements-dev.txt
+pytest
+ruff check .
+```
 
 ### Despliegue en Streamlit Cloud
 
@@ -174,14 +207,20 @@ La aplicacion estara disponible en `http://localhost:8501`.
 
 ## Fuentes de datos
 
-| Indicador | Fuente | Frecuencia |
-|---|---|---|
-| Valor UF | Banco Central via mindicador.cl | Diaria |
-| Comisiones AFP | Superintendencia de Pensiones | Mensual (manual) |
-| Rentabilidades AFP | Superintendencia de Pensiones | Mensual (manual) |
-| Inflacion historica | INE via mindicador.cl | Mensual |
-| Pension Basica Solidaria | Decreto Supremo | Anual (manual) |
-| Tope imponible | Ley 19.728 | Anual (manual) |
+| Indicador | Fuente primaria | Fallback automatico | Frecuencia |
+|---|---|---|---|
+| Valor UF | Banco Central de Chile (API SI3, requiere cuenta gratuita) | mindicador.cl (API publica, sin cuenta) | Diaria |
+| Inflacion historica (IPC) | Banco Central de Chile (API SI3) | mindicador.cl (API publica, sin cuenta) | Mensual |
+| Comisiones AFP | Superintendencia de Pensiones | — | Mensual (manual) |
+| Rentabilidades AFP | Superintendencia de Pensiones | — | Mensual (manual) |
+| Pension Basica Solidaria | Decreto Supremo | — | Anual (manual) |
+| Tope imponible | Ley 19.728 | — | Anual (manual) |
+
+**Nota:** la API del Banco Central (SI3) exige registro gratuito y credenciales
+(`BCENTRAL_USER`/`BCENTRAL_PASS`); sin ellas, la aplicacion usa automaticamente
+mindicador.cl (sin necesidad de configuracion) para UF e IPC. La cobertura
+historica de mindicador.cl es menor que la del BCCh. Ver seccion
+[Configuracion opcional](#configuracion-opcional-banco-central-de-chile).
 
 ---
 
@@ -229,6 +268,20 @@ Saldo_Final = G_n x sum_{t=0}^{n-1} [C_t / G_t]
 - Ley 20.255 (2008) — Reforma Previsional (PBS y APS)
 - Ley 21.563 (2024) — Pension Garantizada Universal (PGU)
 - Circular SP N° 1.723 — Comisiones AFP vigentes
+
+---
+
+## Notas de desarrollo
+
+Este proyecto fue construido con asistencia de IA (Claude): la implementacion
+inicial, un refactor posterior hacia la arquitectura modular actual, y una
+auditoria que corrigio dos errores de calculo reales (el tope del subsidio
+APV Regimen A estaba inflado 12x por una multiplicacion de mas, y el piso de
+Pension Basica Solidaria usaba un valor fijo desactualizado de 2024 en vez
+del valor vigente) y agrego un fallback automatico a mindicador.cl para que
+la aplicacion funcione sin necesidad de credenciales del Banco Central. El
+codigo de la serie UTM del BCCh (`F073.UTR.PRE.Z.M`) fue verificado contra la
+API real.
 
 ---
 
